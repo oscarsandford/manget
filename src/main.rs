@@ -2,6 +2,14 @@
 
 use clap::Parser;
 use serde::{Serialize, Deserialize};
+use reqwest::blocking::Client;
+use printpdf::{
+	PdfDocument, Image, 
+	Mm, ImageTransform, ImageXObject, ColorBits, ColorSpace, Px,
+};
+use printpdf::image_crate::*;
+use std::fs::File;
+use std::io::Write;
 
 // TODO: make this configurable.
 const OUT_DIR: &'static str = "./out";
@@ -50,17 +58,60 @@ struct Chapter {
 }
 
 
-fn save_pages(pages: Vec<String>, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn get_pages(client: Client, pages: Vec<String>, label: &str) -> Result<(), Box<dyn std::error::Error>> {
 	println!("Saving {} pages for {}..", pages.len(), label);
+
+	let (doc, mut curr_page, mut curr_layer) = PdfDocument::new(label, Mm(582.), Mm(582.), "Layer 1");
+
 	for (i, page) in pages.iter().enumerate() {
-		// TODO: use the client from earlier.
-		let img_bytes = reqwest::blocking::get(page)?.bytes()?;
-		let img = image::load_from_memory(&img_bytes)?;
-		let len = page.len();
-		let filename = format!("{}/{}_{}.{}", OUT_DIR, label, i, &page[len-3..]);
-		img.save(&filename)?;
-		println!("\t {} saved.", filename);
+		println!("Working on page {}:", i+1);
+		let img_bytes = client
+			.get(page)
+			.send()?
+			.bytes()?;
+		
+
+		// let len = page.len();
+		// let filename = format!("{}/{}_{}.{}", OUT_DIR, label, i, &page[len-3..]);
+		// img.save(&filename)?;
+		// println!("\t {} saved.", filename);
+
+		println!("\t bytes to dynimg");
+
+		let dyn_img: DynamicImage = load_from_memory(&img_bytes)?;
+		
+		let ctype = dyn_img.color();
+		let data = dyn_img.as_bytes().to_vec();
+
+		let imgx = ImageXObject {
+			width: Px(dyn_img.width() as usize),
+			height: Px(dyn_img.height() as usize),
+			color_space: ColorSpace::from(ctype),
+			bits_per_component: ColorBits::from(ctype),
+			image_data: data,
+			interpolate: true,
+			image_filter: None,
+			clipping_bbox: None,
+		};
+
+		let imgp = Image::from(imgx);
+
+		println!("\t Adding image to PDF.");
+		let layer = doc.get_page(curr_page).get_layer(curr_layer);
+		imgp.add_to_layer(layer.clone(), ImageTransform::default());
+
+		println!("\t Creating new page and layer.");
+		(curr_page, curr_layer) = doc.add_page(Mm(582.), Mm(582.), format!("Layer {}", i+1));
+		println!("------");
 	}
+
+	
+	let pdf_bytes = doc.save_to_bytes()?;
+
+	println!("Writing pdf file.");
+	let mut file = File::create(format!("{}/{}.pdf", OUT_DIR, label))?;
+	file.write_all(&pdf_bytes)?;
+
 	Ok(())
 }
 
@@ -68,7 +119,7 @@ fn save_pages(pages: Vec<String>, label: &str) -> Result<(), Box<dyn std::error:
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let args = Args::parse();
 	
-	let client = reqwest::blocking::Client::new();
+	let client = Client::new();
 
 	// TODO: User can search for the chapter id's somehow?
 	
@@ -87,14 +138,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		(response.chapter.data, "data")
 	};
 	
-	let pages: Vec<String> = imgs.into_iter().map(|img| format!(
+	let pages: Vec<String> = imgs.iter().map(|img| format!(
 		"{}/{}/{}/{}",
 		response.baseUrl, quality, response.chapter.hash, img
 	)).collect();
 
 	dbg!(&pages);
 
-	save_pages(pages, "tmp")?;
+
+
+	get_pages(client, pages, "tmp")?;
 
 	Ok(())
 }
