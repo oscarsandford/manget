@@ -81,11 +81,11 @@ fn embed_image(img: MangaImage, doc: &PdfDocumentReference, page: PdfPageIndex, 
 }
 
 /*
-Compile a chapter. This involves reqwesting each page from the 
+Bind pages (of a chapter, for the most part). This involves reqwesting each page from the 
 client, binding these pages in a PDF doc, and writing it to disk.
 */
-pub fn compile_chapter(client: &MDClient, pages: Vec<String>, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-	println!("Compiling a chapter of {} pages called {}:", pages.len(), filename);
+pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+	println!("Binding {} pages called {}:", pages.len(), filename);
 
 	println!("> Working on page 1.");
 	let img = create_manga_image(client, &pages[0])?;
@@ -100,7 +100,7 @@ pub fn compile_chapter(client: &MDClient, pages: Vec<String>, filename: &str) ->
 		embed_image(img, &doc, page, layer);
 	}
 
-	println!("Saving chapter as pdf file.");
+	println!("Saving bound pages as a pdf file.");
 	let pdf_bytes = doc.save_to_bytes()?;
 	let mut pdf_file = File::create(format!("{}/{}.pdf", OUT_DIR, filename))?;
 	pdf_file.write_all(&pdf_bytes)?;
