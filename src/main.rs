@@ -16,18 +16,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// Get manga chapters from the swagger API.
 	// TODO: We need to fix the problem where the chapter IDs are not the English version.
 	let chapters = get_manga_chapters(&client, "21f54bc1-aefd-4be1-8284-5858b1df0e55")?;
-	// Grab a specific chapter we want to bind.
-	let chp_id = get_chapter_id(chapters, "707");
 
-	match chp_id {
-		Some(id) => {
-			// Retrieve this chapter's pages from the at-home API.
-			let pages = get_chapter_pages(&client, &args, id)?;
-			// Bind them to a PDF.
-			bind_pages(&client, pages, "chapter name")?;
-		},
-		None => eprintln!("No such chapter was found."),
-	}
+	dbg!(&chapters.len());
+
+	// Grab a specific chapter we want to bind.
+	let chp_id = get_chapter_id(&client, chapters, "707", "en".to_string())?;
+
+	dbg!(&chp_id);
+
+	// match chp_id {
+	// 	Some(id) => {
+	// 		// Retrieve this chapter's pages from the at-home API.
+	// 		let pages = get_chapter_pages(&client, &args, id)?;
+	// 		// Bind them to a PDF.
+	// 		bind_pages(&client, pages, "chapter name")?;
+	// 	},
+	// 	None => eprintln!("No such chapter was found."),
+	// }
 
 	Ok(())
 }

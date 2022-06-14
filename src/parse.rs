@@ -50,9 +50,9 @@ struct ChapterPages {
 
 #[derive(Debug)]
 pub struct Chapter {
-	vol_name: String,
-	chp_name: String,
-	chp_id_main_lang: String,
+	volume: String,
+	number: String,
+	ids: Vec<String>,
 }
 
 pub struct MDClient {
@@ -101,16 +101,28 @@ pub fn get_chapter_pages(client: &MDClient, args: &Args, chapter_id: String) -> 
 	)).collect())
 }
 
-/*
-Returns the ID of a Chapter in a list, given a String query for the chapter name.
-*/
-pub fn get_chapter_id(chapters: Vec<Chapter>, id: &str) -> Option<String> {
+
+pub fn get_chapter_id(client: &MDClient, chapters: Vec<Chapter>, number: &str, target_lang: String) -> Result<String, Box<dyn std::error::Error>> {
 	for chp in chapters.into_iter() {
-		if chp.chp_name == id {
-			return Some(chp.chp_id_main_lang);
+		if chp.number == number {
+			dbg!(&chp);
+			for id in chp.ids {
+				let response = client
+					.fetch(&format!("{}/chapter/{}", API_URL, id))?
+					.json::<serde_json::Value>()?;
+	
+				let lang = response["data"]["attributes"]["translatedLanguage"].as_str().unwrap().to_string();
+
+				dbg!(&lang);
+
+				if lang == target_lang {
+					return Ok(id);
+				}
+			}
 		}
 	}
-	None
+	// Replace this ASAP.
+	Ok("tmp".to_string())
 }
 
 /*
@@ -125,17 +137,19 @@ pub fn get_manga_chapters(client: &MDClient, manga_id: &str) -> Result<Vec<Chapt
 	for (vol, chp_data) in response["volumes"].as_object().unwrap() {
 		for (chp, data) in chp_data["chapters"].as_object().unwrap() {
 			// println!("\t{}: {}", chp, data);
+			let mut ids = vec![data["id"].as_str().unwrap().to_string()];
+			for id in data["others"].as_array().unwrap() {
+				ids.push(id.as_str().unwrap().to_string());
+			}
+
 			chapters.push(Chapter{
-				vol_name: vol.to_string(),
-				chp_name: chp.to_string(),
-				// TODO:
-				// Besides the fact that the line of code below to format the 
-				// the chapter ID is messy and error-prone, is that the "id" 
-				// field may not always be the ID for the English version.
-				chp_id_main_lang: data["id"].as_str().unwrap().to_string(),
-			});
+				volume: vol.to_string(),
+				number: chp.to_string(),
+				ids: ids,
+			});	
 		}
 	}
+
 
 	// Note that the chapters will not be in the correct order in the vector, so we 
 	// will need to either sort them beforehand if we want to bind a whole volume, or 
@@ -148,7 +162,23 @@ pub fn get_manga_chapters(client: &MDClient, manga_id: &str) -> Result<Vec<Chapt
 	// A decision like this is better made down the line, so for now, we will just 
 	// query the vector for a Chapter with a given ID, or the Chapters of a given volume.
 
-	// dbg!(&chapters);
+	// Lastly, the method of only retrieving the first chapter ID does not guarentee it 
+	// will be the English (or other desireable language) version.
+	// I have tried the manga/{id}/feed API endpoint in order to decipher the language 
+	// mappings, but it seems to return fewer results than aggregate. 
+	// Therefore, a possible but terrible solution is to simply bind the chapters for 
+	// each language until we find the language desired.
+	// OR we can maybe scrape using the chapter ID somehow in order to find the language.
+	// IS THERE SOMETHING FOR THIS IN THE SWAGGER ENDPOINT LIST?
+
+	// !!!
+
+	// Yeah nevermind, we can just do chapter/{id} to fetch the single piece of important 
+	// information: the translatedLanguage field.
+	// We look at each chapter ID in this way and choose the one with the desired language match. 
+
+
+	dbg!(&chapters);
 
 	Ok(chapters)
 }
