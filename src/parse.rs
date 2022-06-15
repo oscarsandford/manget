@@ -14,8 +14,8 @@ pub struct Args {
 	manga_name: String,
 
 	/// Chapter #
-	#[clap(short, long)]
-	chapter: Option<u16>,
+	#[clap(short, long, default_value = "1")]
+	chapter: String,
 
 	/// Language
 	#[clap(short, long, default_value = "en")]
@@ -28,10 +28,6 @@ pub struct Args {
 	/// Increase verbosity in stdout
 	#[clap(long)]
 	verbose: bool,
-
-	/// The name of the output pdf
-	#[clap(short, long)]
-	output: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -51,7 +47,7 @@ struct ChapterPages {
 #[derive(Debug)]
 pub struct Chapter {
 	volume: String,
-	number: String,
+	name: String,
 	ids: Vec<String>,
 }
 
@@ -101,10 +97,12 @@ pub fn get_chapter_pages(client: &MDClient, args: &Args, chapter_id: String) -> 
 	)).collect())
 }
 
-
-pub fn get_chapter_id(client: &MDClient, chapters: Vec<Chapter>, number: &str, target_lang: String) -> Result<String, Box<dyn std::error::Error>> {
+/*
+Given a vector of Chapters, retrieve the chapter ID with the given number and target language.
+*/
+pub fn get_chapter_id(client: &MDClient, args: &Args, chapters: Vec<Chapter>) -> Result<String, Box<dyn std::error::Error>> {
 	for chp in chapters.into_iter() {
-		if chp.number == number {
+		if chp.name == args.chapter {
 			dbg!(&chp);
 			for id in chp.ids {
 				let response = client
@@ -115,14 +113,14 @@ pub fn get_chapter_id(client: &MDClient, chapters: Vec<Chapter>, number: &str, t
 
 				dbg!(&lang);
 
-				if lang == target_lang {
+				if lang == args.language {
 					return Ok(id);
 				}
 			}
 		}
 	}
 	// Replace this ASAP.
-	Ok("tmp".to_string())
+	Ok("err".to_string())
 }
 
 /*
@@ -137,6 +135,8 @@ pub fn get_manga_chapters(client: &MDClient, manga_id: &str) -> Result<Vec<Chapt
 	for (vol, chp_data) in response["volumes"].as_object().unwrap() {
 		for (chp, data) in chp_data["chapters"].as_object().unwrap() {
 			// println!("\t{}: {}", chp, data);
+
+			// TODO: see if we can do this better without mutability.
 			let mut ids = vec![data["id"].as_str().unwrap().to_string()];
 			for id in data["others"].as_array().unwrap() {
 				ids.push(id.as_str().unwrap().to_string());
@@ -144,12 +144,11 @@ pub fn get_manga_chapters(client: &MDClient, manga_id: &str) -> Result<Vec<Chapt
 
 			chapters.push(Chapter{
 				volume: vol.to_string(),
-				number: chp.to_string(),
+				name: chp.to_string(),
 				ids: ids,
 			});	
 		}
 	}
-
 
 	// Note that the chapters will not be in the correct order in the vector, so we 
 	// will need to either sort them beforehand if we want to bind a whole volume, or 
@@ -162,23 +161,15 @@ pub fn get_manga_chapters(client: &MDClient, manga_id: &str) -> Result<Vec<Chapt
 	// A decision like this is better made down the line, so for now, we will just 
 	// query the vector for a Chapter with a given ID, or the Chapters of a given volume.
 
-	// Lastly, the method of only retrieving the first chapter ID does not guarentee it 
-	// will be the English (or other desireable language) version.
-	// I have tried the manga/{id}/feed API endpoint in order to decipher the language 
-	// mappings, but it seems to return fewer results than aggregate. 
-	// Therefore, a possible but terrible solution is to simply bind the chapters for 
-	// each language until we find the language desired.
-	// OR we can maybe scrape using the chapter ID somehow in order to find the language.
-	// IS THERE SOMETHING FOR THIS IN THE SWAGGER ENDPOINT LIST?
-
-	// !!!
-
-	// Yeah nevermind, we can just do chapter/{id} to fetch the single piece of important 
-	// information: the translatedLanguage field.
-	// We look at each chapter ID in this way and choose the one with the desired language match. 
-
-
-	dbg!(&chapters);
+	// dbg!(&chapters);
 
 	Ok(chapters)
+}
+
+/*
+Returns a label for the file name of the output PDF.
+This function is needed to preserve the privacy of Args members.
+*/
+pub fn get_label(args: &Args) -> String {
+	format!("ch{}-{}", args.chapter, args.language)
 }

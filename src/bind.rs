@@ -84,12 +84,12 @@ fn embed_image(img: MangaImage, doc: &PdfDocumentReference, page: PdfPageIndex, 
 Bind pages (of a chapter, for the most part). This involves reqwesting each page from the 
 client, binding these pages in a PDF doc, and writing it to disk.
 */
-pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-	println!("Binding {} pages called {}:", pages.len(), filename);
+pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: String) -> Result<(), Box<dyn std::error::Error>> {
+	println!("Binding {} pages called {}:", pages.len(), &filename);
 
 	println!("> Working on page 1.");
 	let img = create_manga_image(client, &pages[0])?;
-	let (doc, mut page, mut layer) = PdfDocument::new(filename, Mm(img.width_mm), Mm(img.height_mm), "");
+	let (doc, mut page, mut layer) = PdfDocument::new(&filename, Mm(img.width_mm), Mm(img.height_mm), "");
 	embed_image(img, &doc, page, layer);
 
 	for i in 1..pages.len() {
