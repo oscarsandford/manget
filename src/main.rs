@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let client = MDClient::new();
 
 	// Get manga chapters from the swagger API.
-	let chapters = client.get_manga_chapters("21f54bc1-aefd-4be1-8284-5858b1df0e55")?;
+	let chapters = client.get_manga_chapters(&args)?;
 
 	dbg!(&chapters.len());
 

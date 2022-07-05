@@ -77,7 +77,7 @@ impl MDClient {
 	Use the reqwest client to retrieve the pages of a manga chapter given its ID.
 	We can tell it which server to pull from based on the Args.
 	*/
-	pub fn get_chapter_pages(&self, args: &Args, chapter_id: String) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+	pub fn get_chapter_pages(&self, args: &Args, chapter_id: String) -> Result<Vec<String>, reqwest::Error> {
 		// This request is blocking.
 		let response = self
 			.fetch(&format!("{}/at-home/server/{}", API_URL, chapter_id))?
@@ -98,7 +98,7 @@ impl MDClient {
 	/*
 	Given a vector of Chapters, retrieve the chapter ID with the given number and target language.
 	*/
-	pub fn get_chapter_id(&self, args: &Args, chapters: Vec<Chapter>) -> Result<String, Box<dyn std::error::Error>> {
+	pub fn get_chapter_id(&self, args: &Args, chapters: Vec<Chapter>) -> Result<String, reqwest::Error> {
 		for chp in chapters.into_iter() {
 			if chp.name == args.chapter {
 				dbg!(&chp);
@@ -107,13 +107,12 @@ impl MDClient {
 						.fetch(&format!("{}/chapter/{}", API_URL, id))?
 						.json::<serde_json::Value>()?;
 		
-					let lang = response["data"]["attributes"]["translatedLanguage"].as_str().unwrap().to_string();
-
-					dbg!(&lang);
-
-					if lang == args.language {
-						return Ok(id);
-					}
+					if let Some(lang) = response["data"]["attributes"]["translatedLanguage"].as_str() {
+						dbg!(&lang);
+						if lang.to_string() == args.language {
+							return Ok(id);
+						}
+					};
 				}
 			}
 		}
@@ -124,29 +123,34 @@ impl MDClient {
 	/*
 	Retrieve the manga chapters for a given manga ID from the swagger API.
 	*/
-	pub fn get_manga_chapters(&self, manga_id: &str) -> Result<Vec<Chapter>, Box<dyn std::error::Error>> {
+	pub fn get_manga_chapters(&self, args: &Args) -> Result<Vec<Chapter>, reqwest::Error> {
 		let response = self
-			.fetch(&format!("{}/manga/{}/aggregate", API_URL, manga_id))?
+			.fetch(&format!("{}/manga/{}/aggregate", API_URL, args.manga_name))?
 			.json::<serde_json::Value>()?;
 
 		let mut chapters = Vec::<Chapter>::new();
-		for (vol, chp_data) in response["volumes"].as_object().unwrap() {
-			for (chp, data) in chp_data["chapters"].as_object().unwrap() {
-				// println!("\t{}: {}", chp, data);
-
-				// TODO: see if we can do this better without mutability.
-				let mut ids = vec![data["id"].as_str().unwrap().to_string()];
-				for id in data["others"].as_array().unwrap() {
-					ids.push(id.as_str().unwrap().to_string());
+		if let Some(volumes) = response["volumes"].as_object() { 
+			for (vol, chp_data) in volumes {
+				if let Some(chapters_data) = chp_data["chapters"].as_object() {
+					for (chp, data) in chapters_data {
+						// println!("\t{}: {}", chp, data);
+		
+						// TODO: see if we can do this better without mutability.
+						let mut ids = vec![data["id"].as_str().unwrap().to_string()];
+						for id in data["others"].as_array().unwrap() {
+							ids.push(id.as_str().unwrap().to_string());
+						}
+		
+						chapters.push(Chapter{
+							volume: vol.to_string(),
+							name: chp.to_string(),
+							ids: ids,
+						});	
+					}
 				}
-
-				chapters.push(Chapter{
-					volume: vol.to_string(),
-					name: chp.to_string(),
-					ids: ids,
-				});	
 			}
 		}
+		
 
 		// Note that the chapters will not be in the correct order in the vector, so we 
 		// will need to either sort them beforehand if we want to bind a whole volume, or 
