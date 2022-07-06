@@ -13,7 +13,7 @@ use super::MDClient;
 
 const PX_TO_MM_FACTOR: f64 = 0.2645833;
 const PAGE_SCALE_FACTOR: f64 = 3.125; // Found this by trial and error around ~3.0.
-const OUT_DIR: &'static str = "./out";
+const OUT_DIR: &'static str = "./";
 
 struct MangaImage {
 	bytes: Vec<u8>,
@@ -100,10 +100,12 @@ pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: String) -> Re
 		embed_image(img, &doc, page, layer);
 	}
 
-	println!("Saving bound pages as a pdf file.");
+	print!("Saving bound pages as a pdf file... ");
 	let pdf_bytes = doc.save_to_bytes()?;
 	let mut pdf_file = File::create(format!("{}/{}.pdf", OUT_DIR, filename))?;
 	pdf_file.write_all(&pdf_bytes)?;
+
+	print!("done!\n");
 
 	Ok(())
 }

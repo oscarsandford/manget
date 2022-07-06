@@ -10,22 +10,22 @@ const API_URL: &'static str = "https://api.mangadex.org";
 #[derive(Parser)]
 #[clap(author = "oes", version, about, long_about = None)]
 pub struct Args {
-	/// The name of the manga
-	manga_name: String,
+	/// The id of the manga
+	pub id: String,
 
-	/// Chapter #
+	/// Chapter number or numbers (e.g. 1,4,5,7)
 	#[clap(short, long, default_value = "1")]
-	chapter: String,
+	pub chapter: String,
 
-	/// Language
+	/// The translated language
 	#[clap(short, long, default_value = "en")]
-	language: String,
+	pub language: String,
 
-	/// Faster at the cost of image quality
+	/// Get compressed images instead of original quality
 	#[clap(short, long)]
 	fast: bool,
 
-	/// Increase verbosity in stdout
+	/// Increase verbosity in console output
 	#[clap(long)]
 	verbose: bool,
 }
@@ -44,7 +44,6 @@ struct ChapterPages {
 	dataSaver: Vec<String>,
 }
 
-#[derive(Debug)]
 pub struct Chapter {
 	volume: String,
 	name: String,
@@ -71,7 +70,6 @@ impl MDClient {
 	pub fn fetch(&self, query: &String) -> Result<reqwest::blocking::Response, reqwest::Error> {
 		self.client.get(query).send()
 	}
-	// TODO: maybe make specific methods for fetching chapter or manga itself? To make interface cleaner.
 
 	/*
 	Use the reqwest client to retrieve the pages of a manga chapter given its ID.
@@ -96,36 +94,37 @@ impl MDClient {
 	}
 
 	/*
-	Given a vector of Chapters, retrieve the chapter ID with the given number and target language.
+	Given all the Chapters, retrieve the chapter IDs for the selected chapters in the given language.
 	*/
-	pub fn get_chapter_id(&self, args: &Args, chapters: Vec<Chapter>) -> Result<String, reqwest::Error> {
+	pub fn get_chapter_ids(&self, selected_chapters: Vec<&str>, language: &String, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
+		let mut ids = Vec::<String>::new();
+
 		for chp in chapters.into_iter() {
-			if chp.name == args.chapter {
-				dbg!(&chp);
+			if selected_chapters.contains(&chp.name.as_str()) {
 				for id in chp.ids {
 					let response = self
 						.fetch(&format!("{}/chapter/{}", API_URL, id))?
 						.json::<serde_json::Value>()?;
 		
 					if let Some(lang) = response["data"]["attributes"]["translatedLanguage"].as_str() {
-						dbg!(&lang);
-						if lang.to_string() == args.language {
-							return Ok(id);
+						if &lang.to_string() == language {
+							ids.push(id);
+							println!("Chapter {} found in language {}.", chp.name, language);
+							break;
 						}
 					};
 				}
 			}
 		}
-		// Replace this ASAP.
-		Ok("err".to_string())
+		Ok(ids)
 	}
 
 	/*
 	Retrieve the manga chapters for a given manga ID from the swagger API.
 	*/
-	pub fn get_manga_chapters(&self, args: &Args) -> Result<Vec<Chapter>, reqwest::Error> {
+	pub fn get_manga_chapters(&self, manga_id: &String) -> Result<Vec<Chapter>, reqwest::Error> {
 		let response = self
-			.fetch(&format!("{}/manga/{}/aggregate", API_URL, args.manga_name))?
+			.fetch(&format!("{}/manga/{}/aggregate", API_URL, manga_id))?
 			.json::<serde_json::Value>()?;
 
 		let mut chapters = Vec::<Chapter>::new();
@@ -167,12 +166,4 @@ impl MDClient {
 
 		Ok(chapters)
 	}
-}
-
-/*
-Returns a label for the file name of the output PDF.
-This function is needed to preserve the privacy of Args members.
-*/
-pub fn get_label(args: &Args) -> String {
-	format!("ch{}-{}", args.chapter, args.language)
 }
