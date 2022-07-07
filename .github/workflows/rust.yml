@@ -1,4 +1,4 @@
-name: Build Linux/Windows
+name: Build Check for Linux/Windows
 
 on:
   push:
@@ -6,15 +6,25 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            target: x86_64-unknown-linux-gnu
+            suffix: ''
+          - os: windows-latest
+            label: Windows
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
 
+    runs-on: ${{ matrix.os }}
+    
     env:
       CARGO_TERM_COLOR: always
-      BINARY_NAME: manget
+      BINARY_NAME: 'manget${{ matrix.suffix }}'
 
     steps:
     - uses: actions/checkout@v2
-    - name: Build Linux Release
-      run: cargo build --release --target x86_64-unknown-linux-gnu
-    - name: Build Windows Release
-      run: cargo build --release --target x86_64-pc-windows-msvc
+    - name: 'Build ${{ matrix.label }} Release'
+      run: cargo build --release --target ${{ matrix.target }}
