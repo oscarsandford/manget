@@ -13,7 +13,6 @@ use super::MDClient;
 
 const PX_TO_MM_FACTOR: f64 = 0.2645833;
 const PAGE_SCALE_FACTOR: f64 = 3.125; // Found this by trial and error around ~3.0.
-const OUT_DIR: &'static str = "./";
 
 struct MangaImage {
 	bytes: Vec<u8>,
@@ -85,7 +84,7 @@ Bind pages (of a chapter, for the most part). This involves reqwesting each page
 client, binding these pages in a PDF doc, and writing it to disk.
 */
 pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: String) -> Result<(), Box<dyn std::error::Error>> {
-	println!("Binding {} pages called {}:", pages.len(), &filename);
+	println!("Binding {} pages to output file {}:", pages.len(), &filename);
 
 	println!("> Working on page 1.");
 	let img = create_manga_image(client, &pages[0])?;
@@ -102,7 +101,7 @@ pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: String) -> Re
 
 	print!("Saving bound pages as a pdf file... ");
 	let pdf_bytes = doc.save_to_bytes()?;
-	let mut pdf_file = File::create(format!("{}/{}.pdf", OUT_DIR, filename))?;
+	let mut pdf_file = File::create(filename)?;
 	pdf_file.write_all(&pdf_bytes)?;
 
 	print!("done!\n");

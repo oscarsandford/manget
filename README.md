@@ -2,22 +2,18 @@
 
 A CLI tool for binding digital pages of manga from MangaDex to PDFs for offline reading.
 
-## Installation
-
-TODO
-
 
 ## Guide and General Usage
 
 Unfortunately, MangaDex has made it difficult to scrape their search page, so the search functionality will have to wait. You must navigate to [mangadex.org](https://mangadex.org/) yourself and find a suitable manga to download yourself. We are mainly interested in the **manga ID**, or the highlighted part in the example below:
 
-<p style="text-align: center;">https://mangadex.org/title/<strong>21f54bc1-aefd-4be1-8284-5858b1df0e55</strong>/initial-d</p>
+<p style="text-align: center;"><strong></strong>https://mangadex.org/title/<strong>21f54bc1-aefd-4be1-8284-5858b1df0e55</strong>/initial-d</p>
 
 Peruse the page for chapters you would like to read, and note if the language you want them in is available. Then, consider the technical usage of the tool below.
 
 ```
-manget 0.1.0
-oes
+manget 1.0.0
+Oscar Sandford
 A CLI tool for binding manga from MangaDex
 
 USAGE:
@@ -31,8 +27,21 @@ OPTIONS:
     -f, --fast                   Get compressed images instead of original quality     
     -h, --help                   Print help information
     -l, --language <LANGUAGE>    The translated language [default: en]
+    -o, --output <OUTPUT>        Specify an output file path [default: ./bound.pdf]
     -V, --version                Print version information
         --verbose                Increase verbosity in console output
+```
+
+
+## Build
+
+You can build the project yourself in release mode by cloning this GitHub repository and running
+```sh
+cargo build --release --target x86_64-unknown-linux-gnu
+```
+Or for Windows MSVC (or any other target you want!):
+```
+cargo build --release --target x86_64-pc-windows-msvc
 ```
 
 
@@ -47,11 +56,11 @@ manget 21f54bc1-aefd-4be1-8284-5858b1df0e55 -c 5 -l "pl" -f
 
 Separate the chapters you want together with commas.
 ```sh
-# Bind the English translation of chapters 1, 4, 5, and 7 of Initial D.
-manget 21f54bc1-aefd-4be1-8284-5858b1df0e55 -c 1,4,5,7
+# Bind the English translation of chapters 1, 4, 5, and 7 of Initial D to a file called initial_d.pdf.
+manget 21f54bc1-aefd-4be1-8284-5858b1df0e55 -c 1,4,5,7 -o ./out/initial_d.pdf
 ```
 
-When complete, the bound PDF will be saved in the current working directory.
+If an alternative output file path is not specified, the bound PDF will be saved in the current working directory.
 
 
 <hr>

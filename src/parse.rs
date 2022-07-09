@@ -8,7 +8,7 @@ const API_URL: &'static str = "https://api.mangadex.org";
 
 /// A CLI tool for binding manga from MangaDex.
 #[derive(Parser)]
-#[clap(author = "oes", version, about, long_about = None)]
+#[clap(author = "Oscar Sandford", version, about, long_about = None)]
 pub struct Args {
 	/// The id of the manga
 	pub id: String,
@@ -20,6 +20,10 @@ pub struct Args {
 	/// The translated language
 	#[clap(short, long, default_value = "en")]
 	pub language: String,
+
+	/// Specify an output file path
+	#[clap(short, long, default_value = "./bound.pdf")]
+	pub output: String,
 
 	/// Get compressed images instead of original quality
 	#[clap(short, long)]
@@ -45,7 +49,7 @@ struct ChapterPages {
 }
 
 pub struct Chapter {
-	volume: String,
+	//volume: String,
 	name: String,
 	ids: Vec<String>,
 }
@@ -129,7 +133,7 @@ impl MDClient {
 
 		let mut chapters = Vec::<Chapter>::new();
 		if let Some(volumes) = response["volumes"].as_object() { 
-			for (vol, chp_data) in volumes {
+			for (_vol, chp_data) in volumes {
 				if let Some(chapters_data) = chp_data["chapters"].as_object() {
 					for (chp, data) in chapters_data {
 						// println!("\t{}: {}", chp, data);
@@ -141,7 +145,7 @@ impl MDClient {
 						}
 		
 						chapters.push(Chapter{
-							volume: vol.to_string(),
+							//volume: vol.to_string(),
 							name: chp.to_string(),
 							ids: ids,
 						});	
@@ -150,7 +154,6 @@ impl MDClient {
 			}
 		}
 		
-
 		// Note that the chapters will not be in the correct order in the vector, so we 
 		// will need to either sort them beforehand if we want to bind a whole volume, or 
 		// do that when merging the PDF docs (if that's how we decide to do that).

@@ -14,7 +14,7 @@ fn driver() -> Result<(), &'static str> {
 		Err(_) => return Err("[!] Error aggregating all the chapters for this manga."),
 	};
 	if all_chapters.len() == 0 {
-		return Err("[!] No manga chapters found. Could be an invalid ID.");
+		return Err("[!] No manga chapters found. Likely an invalid ID.");
 	}
 	// Delimit on commas for the chapter(s) selected.
 	let selection = args.chapter.split(",").collect();
@@ -29,18 +29,16 @@ fn driver() -> Result<(), &'static str> {
 
 	// Grab the pages for each chapter and append them to a flat list.
 	for id in ids {
-		let mut cpages = match client.get_chapter_pages(&args, id) {
-			Ok(res) => res,
-			Err(_) => return Err("[!] Error while retrieving chapter pages.")
-		};
-		pages.append(&mut cpages);
+		if let Ok(mut res) = client.get_chapter_pages(&args, id) {
+			pages.append(&mut res);
+		}
 	}
 	if pages.len() == 0 {
 		return Err("[!] No pages were able to be retrieved based on your chapter and language input.");
 	}
 
 	// Bind all the desired pages to a PDF.
-	match bind_pages(&client, pages, format!("ch{}-{}", &args.chapter, &args.language)) {
+	match bind_pages(&client, pages, args.output) {
 		Ok(res) => res,
 		Err(_) => return Err("[!] Error while binding PDF."),
 	}
