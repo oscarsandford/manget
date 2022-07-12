@@ -85,8 +85,8 @@ client, binding these pages in a PDF doc, and writing it to disk.
 */
 pub fn bind_pages(client: &MDClient, pages: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 	println!("(2/3) Binding {} pages to output file {}. This may take some time!", pages.len(), &client.args.output);
-	client.status(format!("> Working on page 1."));
 
+	client.status(format!("> Working on page 1."));
 	let img = create_manga_image(client, &pages[0])?;
 	let (doc, mut page, mut layer) = PdfDocument::new(&client.args.output, Mm(img.width_mm), Mm(img.height_mm), "");
 	embed_image(img, &doc, page, layer);

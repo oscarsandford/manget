@@ -49,8 +49,8 @@ struct ChapterPages {
 }
 
 pub struct Chapter {
-	//volume: String,
-	name: String,
+	//volume: u16,
+	name: u16,
 	ids: Vec<String>,
 }
 
@@ -104,11 +104,18 @@ impl MDClient {
 	Given all the Chapters, retrieve the chapter IDs for the selected chapters in the given language.
 	*/
 	pub fn get_chapter_ids(&self, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
-		let selected_chapters: Vec<&str> = self.args.chapter.split(",").collect();
+		let selected_chapters: Vec<u16> = self.args.chapter
+								.split(",")
+								.map(|s| {match s.parse::<u16>() {
+									Ok(x) => x,
+									Err(_) => 0,
+								}})
+								.collect();
 		let mut ids = Vec::<String>::new();
+		self.status(format!("[get_chapter_ids:selected_chapters] {:#?}", &selected_chapters));
 
 		for chp in chapters.into_iter() {
-			if selected_chapters.contains(&chp.name.as_str()) {
+			if selected_chapters.contains(&chp.name) {
 				for id in chp.ids {
 					let req = format!("{}/chapter/{}", API_URL, id);
 					self.status(format!("[get_chapter_ids:req] {:#?}", &req));
@@ -157,9 +164,13 @@ impl MDClient {
 							ids.push(id.as_str().unwrap().to_string());
 						}
 		
+						let name = match chp.parse::<u16>() {
+							Ok(x) => x,
+							Err(_) => 0,
+						};
+						
 						chapters.push(Chapter{
-							//volume: vol.to_string(),
-							name: chp.to_string(),
+							name: name,
 							ids: ids,
 						});	
 					}
@@ -178,7 +189,7 @@ impl MDClient {
 		// A decision like this is better made down the line, so for now, we will just 
 		// query the vector for a Chapter with a given ID, or the Chapters of a given volume.
 
-		// dbg!(&chapters);
+		chapters.sort_by_key(|c| c.name);
 
 		Ok(chapters)
 	}
