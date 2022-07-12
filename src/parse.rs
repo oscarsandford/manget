@@ -11,26 +11,26 @@ const API_URL: &'static str = "https://api.mangadex.org";
 #[clap(author = "Oscar Sandford", version, about, long_about = None)]
 pub struct Args {
 	/// The id of the manga
-	pub id: String,
+	id: String,
 
 	/// Chapter number or numbers (e.g. 1,4,5,7)
 	#[clap(short, long, default_value = "1")]
-	pub chapter: String,
+	chapter: String,
 
 	/// The translated language
 	#[clap(short, long, default_value = "en")]
-	pub language: String,
-
-	/// Specify an output file path
-	#[clap(short, long, default_value = "./bound.pdf")]
-	pub output: String,
+	language: String,
 
 	/// Get compressed images instead of original quality
 	#[clap(short, long)]
 	fast: bool,
+	
+	/// Specify an output file path
+	#[clap(short, long, default_value = "bound.pdf")]
+	pub output: String,
 
 	/// Increase verbosity in console output
-	#[clap(long)]
+	#[clap(short, long)]
 	verbose: bool,
 }
 
@@ -56,17 +56,16 @@ pub struct Chapter {
 
 pub struct MDClient {
 	pub client: Client,
+	pub args: Args,
 }
 
-impl Args {
-	pub fn parse_args() -> Args {
-		Args::parse()
-	}
-}
 
 impl MDClient {
 	pub fn new() -> MDClient {
-		MDClient { client: Client::new() }
+		MDClient { 
+			client: Client::new(),
+			args: Args::parse(),
+		}
 	}
 	// Use references here because a primary use case is passing Vector elements as indexed.
 	// Also we almost never want to consume the client.
@@ -79,44 +78,54 @@ impl MDClient {
 	Use the reqwest client to retrieve the pages of a manga chapter given its ID.
 	We can tell it which server to pull from based on the Args.
 	*/
-	pub fn get_chapter_pages(&self, args: &Args, chapter_id: String) -> Result<Vec<String>, reqwest::Error> {
+	pub fn get_chapter_pages(&self, chapter_id: String) -> Result<Vec<String>, reqwest::Error> {
 		// This request is blocking.
-		let response = self
-			.fetch(&format!("{}/at-home/server/{}", API_URL, chapter_id))?
+		let req = format!("{}/at-home/server/{}", API_URL, chapter_id);
+		self.status(format!("[get_chapter_pages:req] {:#?}", &req));
+		let res = self
+			.fetch(&req)?
 			.json::<ChapterPagesData>()?;
 		
-		let (imgs, quality) = if args.fast { 
-			(response.chapter.dataSaver, "data-saver")
+		self.status(format!("[get_chapter_pages:res] {:#?}", &res));
+
+		let (imgs, quality) = if self.args.fast { 
+			(res.chapter.dataSaver, "data-saver")
 		} else { 
-			(response.chapter.data, "data")
+			(res.chapter.data, "data")
 		};
 		
 		Ok(imgs.iter().map(|img| format!(
 			"{}/{}/{}/{}",
-			response.baseUrl, quality, response.chapter.hash, img
+			res.baseUrl, quality, res.chapter.hash, img
 		)).collect())
 	}
 
 	/*
 	Given all the Chapters, retrieve the chapter IDs for the selected chapters in the given language.
 	*/
-	pub fn get_chapter_ids(&self, selected_chapters: Vec<&str>, language: &String, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
+	pub fn get_chapter_ids(&self, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
+		let selected_chapters: Vec<&str> = self.args.chapter.split(",").collect();
 		let mut ids = Vec::<String>::new();
 
 		for chp in chapters.into_iter() {
 			if selected_chapters.contains(&chp.name.as_str()) {
 				for id in chp.ids {
-					let response = self
-						.fetch(&format!("{}/chapter/{}", API_URL, id))?
+					let req = format!("{}/chapter/{}", API_URL, id);
+					self.status(format!("[get_chapter_ids:req] {:#?}", &req));
+
+					let res = self
+						.fetch(&req)?
 						.json::<serde_json::Value>()?;
-		
-					if let Some(lang) = response["data"]["attributes"]["translatedLanguage"].as_str() {
-						if &lang.to_string() == language {
-							ids.push(id);
-							println!("Chapter {} found in language {}.", chp.name, language);
-							break;
-						}
-					};
+					// We should be able to safely do this with the translatedLanguage field, 
+					// but we must avoid results where the externalUrl field is set.
+					let lang = res["data"]["attributes"]["translatedLanguage"].as_str().unwrap();
+					let ext_url = res["data"]["attributes"]["externalUrl"].as_str();
+					
+					if &lang.to_string() == &self.args.language && !ext_url.is_some() {
+						ids.push(id);
+						self.status(format!("[get_chapter_ids:res(matched)] {:#?}", &res));
+						break;
+					}
 				}
 			}
 		}
@@ -126,17 +135,21 @@ impl MDClient {
 	/*
 	Retrieve the manga chapters for a given manga ID from the swagger API.
 	*/
-	pub fn get_manga_chapters(&self, manga_id: &String) -> Result<Vec<Chapter>, reqwest::Error> {
-		let response = self
-			.fetch(&format!("{}/manga/{}/aggregate", API_URL, manga_id))?
+	pub fn get_manga_chapters(&self) -> Result<Vec<Chapter>, reqwest::Error> {
+		let req = format!("{}/manga/{}/aggregate", API_URL, self.args.id);
+		self.status(format!("[get_manga_chapters:req] {:#?}", &req));
+		
+		let res = self
+			.fetch(&req)?
 			.json::<serde_json::Value>()?;
 
+		// TODO: change this to a HashMap? See longer comment below.
 		let mut chapters = Vec::<Chapter>::new();
-		if let Some(volumes) = response["volumes"].as_object() { 
+
+		if let Some(volumes) = res["volumes"].as_object() { 
 			for (_vol, chp_data) in volumes {
 				if let Some(chapters_data) = chp_data["chapters"].as_object() {
 					for (chp, data) in chapters_data {
-						// println!("\t{}: {}", chp, data);
 		
 						// TODO: see if we can do this better without mutability.
 						let mut ids = vec![data["id"].as_str().unwrap().to_string()];
@@ -168,5 +181,16 @@ impl MDClient {
 		// dbg!(&chapters);
 
 		Ok(chapters)
+	}
+
+	/*
+	Prints a given status message to the console when in verbose mode.
+	There was a possibility to use a custom macro here, but to keep this 
+	interface clean, we need to check the verbosity level from the Args.
+	*/
+	pub fn status(&self, msg: String) {
+		if self.args.verbose {
+			println!("{}", msg);
+		}
 	}
 }

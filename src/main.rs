@@ -2,25 +2,24 @@ mod bind;
 mod parse;
 
 use bind::bind_pages;
-use parse::{Args, MDClient};
+use parse::MDClient;
 
 fn driver() -> Result<(), &'static str> {
-	let args = Args::parse_args();
 	let client = MDClient::new();
+	
+	println!("(1/3) Searching MangaDex for the specified manga and chapters.");
 
 	// Get manga chapters from the swagger API.
-	let all_chapters = match client.get_manga_chapters(&args.id) {
+	let all_chapters = match client.get_manga_chapters() {
 		Ok(res) => res,
 		Err(_) => return Err("[!] Error aggregating all the chapters for this manga."),
 	};
 	if all_chapters.len() == 0 {
 		return Err("[!] No manga chapters found. Likely an invalid ID.");
 	}
-	// Delimit on commas for the chapter(s) selected.
-	let selection = args.chapter.split(",").collect();
 
 	// Find chapter IDs to match the language we want.
-	let ids = match client.get_chapter_ids(selection, &args.language, all_chapters) {
+	let ids = match client.get_chapter_ids(all_chapters) {
 		Ok(res) => res,
 		Err(_) => return Err("[!] Error finding chapter IDs for given language.")
 	};
@@ -29,7 +28,7 @@ fn driver() -> Result<(), &'static str> {
 
 	// Grab the pages for each chapter and append them to a flat list.
 	for id in ids {
-		if let Ok(mut res) = client.get_chapter_pages(&args, id) {
+		if let Ok(mut res) = client.get_chapter_pages(id) {
 			pages.append(&mut res);
 		}
 	}
@@ -38,7 +37,7 @@ fn driver() -> Result<(), &'static str> {
 	}
 
 	// Bind all the desired pages to a PDF.
-	match bind_pages(&client, pages, args.output) {
+	match bind_pages(&client, pages) {
 		Ok(res) => res,
 		Err(_) => return Err("[!] Error while binding PDF."),
 	}

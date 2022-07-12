@@ -83,27 +83,25 @@ fn embed_image(img: MangaImage, doc: &PdfDocumentReference, page: PdfPageIndex, 
 Bind pages (of a chapter, for the most part). This involves reqwesting each page from the 
 client, binding these pages in a PDF doc, and writing it to disk.
 */
-pub fn bind_pages(client: &MDClient, pages: Vec<String>, filename: String) -> Result<(), Box<dyn std::error::Error>> {
-	println!("Binding {} pages to output file {}:", pages.len(), &filename);
+pub fn bind_pages(client: &MDClient, pages: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+	println!("(2/3) Binding {} pages to output file {}. This may take some time!", pages.len(), &client.args.output);
+	client.status(format!("> Working on page 1."));
 
-	println!("> Working on page 1.");
 	let img = create_manga_image(client, &pages[0])?;
-	let (doc, mut page, mut layer) = PdfDocument::new(&filename, Mm(img.width_mm), Mm(img.height_mm), "");
+	let (doc, mut page, mut layer) = PdfDocument::new(&client.args.output, Mm(img.width_mm), Mm(img.height_mm), "");
 	embed_image(img, &doc, page, layer);
 
 	for i in 1..pages.len() {
-		println!("> Working on page {}.", i+1);
-		
+		client.status(format!("> Working on page {}.", i+1));
 		let img = create_manga_image(client, &pages[i])?;
 		(page, layer) = doc.add_page(Mm(img.width_mm), Mm(img.height_mm), "");
 		embed_image(img, &doc, page, layer);
 	}
 
-	print!("Saving bound pages as a pdf file... ");
+	print!("(3/3) Saving bound pages as a pdf file... ");
 	let pdf_bytes = doc.save_to_bytes()?;
-	let mut pdf_file = File::create(filename)?;
+	let mut pdf_file = File::create(&client.args.output)?;
 	pdf_file.write_all(&pdf_bytes)?;
-
 	print!("done!\n");
 
 	Ok(())
