@@ -33,7 +33,7 @@ OPTIONS:
 ```
 
 
-## Build
+## Setup
 
 You can build the project yourself in release mode by cloning this GitHub repository and running
 ```sh
@@ -43,7 +43,12 @@ Or for Windows MSVC (or any other target you want!):
 ```
 cargo build --release --target x86_64-pc-windows-msvc
 ```
-
+If you like convenience and are running Linux, you can move the executable `manget` to the user's local bin directory so you can run the `manget` command anywhere in a terminal:
+```sh
+chmod 777 manget
+sudo cp manget /usr/local/bin
+```
+There will be a documented way to do this for Windows soon.
 
 ## Examples
 
