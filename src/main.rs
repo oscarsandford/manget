@@ -19,7 +19,7 @@ fn driver() -> Result<(), &'static str> {
 	}
 
 	// Find chapter IDs to match the language we want.
-	let ids = match client.get_chapter_ids(all_chapters) {
+	let ids = match client.get_chapter_lang_ids(all_chapters) {
 		Ok(res) => res,
 		Err(_) => return Err("[!] Error finding chapter IDs for given language.")
 	};

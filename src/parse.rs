@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use serde::{Serialize, Deserialize};
+use serde_json::json;
 use reqwest::blocking::Client;
 
 const API_URL: &'static str = "https://api.mangadex.org";
@@ -13,7 +14,7 @@ pub struct Args {
 	/// The id of the manga
 	id: String,
 
-	/// Chapter number or numbers (e.g. 1,4,5,7)
+	/// Chapter number or closed interval (e.g. 3 or 1-5)
 	#[clap(short, long, default_value = "1")]
 	chapter: String,
 
@@ -24,6 +25,10 @@ pub struct Args {
 	/// Get compressed images instead of original quality
 	#[clap(short, long)]
 	fast: bool,
+
+	/// Output images into a folder instead of binding them
+	#[clap(short, long)]
+	images: bool,
 	
 	/// Specify an output file path
 	#[clap(short, long, default_value = "bound.pdf")]
@@ -49,7 +54,6 @@ struct ChapterPages {
 }
 
 pub struct Chapter {
-	//volume: u16,
 	name: u16,
 	ids: Vec<String>,
 }
@@ -103,36 +107,38 @@ impl MDClient {
 	/*
 	Given all the Chapters, retrieve the chapter IDs for the selected chapters in the given language.
 	*/
-	pub fn get_chapter_ids(&self, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
-		let selected_chapters: Vec<u16> = self.args.chapter
-								.split(",")
+	pub fn get_chapter_lang_ids(&self, chapters: Vec<Chapter>) -> Result<Vec<String>, reqwest::Error> {
+		let sargs: Vec<u16> = self.args.chapter
+								.split("-")
+								.take(2)
 								.map(|s| {match s.parse::<u16>() {
 									Ok(x) => x,
-									Err(_) => 0,
+									Err(_) => 1,
 								}})
 								.collect();
+
+		let start: u16 = sargs[0];
+		let end: u16 = if sargs.len() > 1 && sargs[0] < sargs[1] { sargs[1] } else { sargs[0] };
+		self.status(format!("[get_chapter_ids:start->end] {:#?}->{:#?}", &start, &end));
 		let mut ids = Vec::<String>::new();
-		self.status(format!("[get_chapter_ids:selected_chapters] {:#?}", &selected_chapters));
 
-		for chp in chapters.into_iter() {
-			if selected_chapters.contains(&chp.name) {
-				for id in chp.ids {
-					let req = format!("{}/chapter/{}", API_URL, id);
-					self.status(format!("[get_chapter_ids:req] {:#?}", &req));
-
-					let res = self
-						.fetch(&req)?
-						.json::<serde_json::Value>()?;
-					// We should be able to safely do this with the translatedLanguage field, 
-					// but we must avoid results where the externalUrl field is set.
-					let lang = res["data"]["attributes"]["translatedLanguage"].as_str().unwrap();
-					let ext_url = res["data"]["attributes"]["externalUrl"].as_str();
-					
-					if &lang.to_string() == &self.args.language && !ext_url.is_some() {
-						ids.push(id);
-						self.status(format!("[get_chapter_ids:res(matched)] {:#?}", &res));
-						break;
-					}
+		// Only need to iterate over the range of chapters we need.
+		for chapter in chapters.iter().filter(|c| start <= c.name && c.name <= end) {
+			for id in &chapter.ids {
+				let req = format!("{}/chapter/{}", API_URL, id);
+				self.status(format!("[get_chapter_ids:req] {:#?}", &req));
+				let res = self
+					.fetch(&req)?
+					.json::<serde_json::Value>()?;
+				// Avoid results where the externalUrl field is set - we cannot retrieve pages off-site.
+				let lang: &str = res["data"]["attributes"]["translatedLanguage"].as_str().unwrap_or("");
+				let ext_url: Option<&str> = res["data"]["attributes"]["externalUrl"].as_str();
+				
+				if &lang.to_string() == &self.args.language && !ext_url.is_some() {
+					ids.push(id.to_string());
+					self.status(format!("[get_chapter_ids:res(matched)] {:#?}", &res));
+					println!(" Chapter {} retrieved successfully.", chapter.name);
+					break;
 				}
 			}
 		}
@@ -140,7 +146,7 @@ impl MDClient {
 	}
 
 	/*
-	Retrieve the manga chapters for a given manga ID from the swagger API.
+	Retrieve the manga chapters for a given manga ID from the MangaDex swagger API.
 	*/
 	pub fn get_manga_chapters(&self) -> Result<Vec<Chapter>, reqwest::Error> {
 		let req = format!("{}/manga/{}/aggregate", API_URL, self.args.id);
@@ -150,45 +156,28 @@ impl MDClient {
 			.fetch(&req)?
 			.json::<serde_json::Value>()?;
 
-		// TODO: change this to a HashMap? See longer comment below.
 		let mut chapters = Vec::<Chapter>::new();
 
 		if let Some(volumes) = res["volumes"].as_object() { 
 			for (_vol, chp_data) in volumes {
 				if let Some(chapters_data) = chp_data["chapters"].as_object() {
-					for (chp, data) in chapters_data {
-		
-						// TODO: see if we can do this better without mutability.
-						let mut ids = vec![data["id"].as_str().unwrap().to_string()];
-						for id in data["others"].as_array().unwrap() {
-							ids.push(id.as_str().unwrap().to_string());
-						}
-		
-						let name = match chp.parse::<u16>() {
-							Ok(x) => x,
-							Err(_) => 0,
+					for (chp, data) in chapters_data {	
+
+						let ids: Vec<String> = data["others"].as_array().unwrap_or(&vec![json!([])]).into_iter()
+								.map(|id| id.as_str().unwrap_or("").to_string())
+								.chain(std::iter::once(data["id"].as_str().unwrap_or("").to_string()))
+								.collect();
+
+						if let Ok(name) = chp.parse::<u16>() {
+							chapters.push(Chapter{name, ids})
 						};
-						
-						chapters.push(Chapter{
-							name: name,
-							ids: ids,
-						});	
 					}
 				}
 			}
 		}
 		
-		// Note that the chapters will not be in the correct order in the vector, so we 
-		// will need to either sort them beforehand if we want to bind a whole volume, or 
-		// do that when merging the PDF docs (if that's how we decide to do that).
-
-		// Further, while the use of a vector is a good generic start, it means that we have 
-		// to run the length of the vector in order to find a chapter in the worst case.
-		// A HashMap would help solve this problem, but then we need to decide whether the 
-		// key will be a volume or a chapter.
-		// A decision like this is better made down the line, so for now, we will just 
-		// query the vector for a Chapter with a given ID, or the Chapters of a given volume.
-
+		// Note that the chapters will (likely) not be in the correct order in the vector, 
+		// so we must sort them by name (i.e. the chapter number) in ascending order.
 		chapters.sort_by_key(|c| c.name);
 
 		Ok(chapters)
