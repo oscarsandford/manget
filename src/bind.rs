@@ -7,9 +7,7 @@ use printpdf::{
 	ColorBits, ColorSpace, Px, Mm
 };
 use printpdf::image_crate::*;
-
 use super::MDClient;
-
 
 const PX_TO_MM_FACTOR: f64 = 0.2645833;
 const PAGE_SCALE_FACTOR: f64 = 3.125; // Found this by trial and error around ~3.0.
@@ -32,7 +30,7 @@ fn create_manga_image(client: &MDClient, link: &String) -> Result<MangaImage, Bo
 			.bytes()?;
 	let img: DynamicImage = load_from_memory(&img_bytes)?;
 	Ok(MangaImage {
-		bytes: img.as_bytes().to_vec(),
+		bytes: img.to_bytes(),
 		color: img.color(),
 		width_px: img.width(),
 		height_px: img.height(),
@@ -80,11 +78,30 @@ fn embed_image(img: MangaImage, doc: &PdfDocumentReference, page: PdfPageIndex, 
 }
 
 /*
+Saves pages as individual images. This function is called instead of `bind_pages`, when 
+the argument to save image is given. Some code here is reused from `create_manga_image`.
+*/
+pub fn save_pages_as_images(client: &MDClient, pages: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+	println!("(2/3) Saving {} pages as images. This may take some time!", pages.len());
+	for (i, p) in pages.iter().enumerate() {
+		client.status(format!("> Working on page {}.", i+1));
+		let img_bytes = client
+			.fetch(p)?
+			.bytes()?;
+		let img: DynamicImage = load_from_memory(&img_bytes)?;
+		let path = format!("{}_{}.{}", &client.args.output, i+1, &p[p.len()-3..]);
+		img.save(&path)?;
+	}
+	println!("(3/3) Done!");
+	Ok(())
+}
+
+/*
 Bind pages (of a chapter, for the most part). This involves reqwesting each page from the 
 client, binding these pages in a PDF doc, and writing it to disk.
 */
 pub fn bind_pages(client: &MDClient, pages: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-	println!("(2/3) Binding {} pages to output file {}. This may take some time!", pages.len(), &client.args.output);
+	println!("(2/3) Binding {} pages to output file {}.pdf. This may take some time!", pages.len(), &client.args.output);
 
 	client.status(format!("> Working on page 1."));
 	let img = create_manga_image(client, &pages[0])?;
@@ -100,7 +117,7 @@ pub fn bind_pages(client: &MDClient, pages: Vec<String>) -> Result<(), Box<dyn s
 
 	print!("(3/3) Saving bound pages as a pdf file... ");
 	let pdf_bytes = doc.save_to_bytes()?;
-	let mut pdf_file = File::create(&client.args.output)?;
+	let mut pdf_file = File::create(format!("{}.pdf", &client.args.output))?;
 	pdf_file.write_all(&pdf_bytes)?;
 	print!("done!\n");
 

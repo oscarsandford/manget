@@ -1,7 +1,7 @@
 mod bind;
 mod parse;
 
-use bind::bind_pages;
+use bind::{bind_pages, save_pages_as_images};
 use parse::MDClient;
 
 fn driver() -> Result<(), &'static str> {
@@ -36,11 +36,18 @@ fn driver() -> Result<(), &'static str> {
 		return Err("[!] No pages were able to be retrieved based on your chapter and language input.");
 	}
 
-	// Bind all the desired pages to a PDF.
-	match bind_pages(&client, pages) {
-		Ok(res) => res,
-		Err(_) => return Err("[!] Error while binding PDF."),
+	if client.args.images {
+		if let Err(_) = save_pages_as_images(&client, pages) {
+			return Err("[!] Error while saving images.");
+		}
 	}
+	else {
+		// Bind all the desired pages to a PDF.
+		if let Err(_) = bind_pages(&client, pages) {
+			return Err("[!] Error while binding PDF.");
+		}
+	}
+	
 	
 	Ok(())
 }

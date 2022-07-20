@@ -14,7 +14,7 @@ pub struct Args {
 	/// The id of the manga
 	id: String,
 
-	/// Chapter number or closed interval (e.g. 3 or 1-5)
+	/// Chapter number or closed interval (e.g. 1-5)
 	#[clap(short, long, default_value = "1")]
 	chapter: String,
 
@@ -26,12 +26,12 @@ pub struct Args {
 	#[clap(short, long)]
 	fast: bool,
 
-	/// Output images into a folder instead of binding them
+	/// Output individual images instead of a single PDF
 	#[clap(short, long)]
-	images: bool,
+	pub images: bool,
 	
-	/// Specify an output file path
-	#[clap(short, long, default_value = "bound.pdf")]
+	/// Specify an alternative base file name (no extension)
+	#[clap(short, long, default_value = "bound")]
 	pub output: String,
 
 	/// Increase verbosity in console output
